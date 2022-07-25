@@ -1,10 +1,8 @@
 # Home Assistant - History to InfluxDB
 
-## Important
+Adapted from [dseifert](https://github.com/dseifert/homeassistant2influxdb) now archived version
 
-As this script is used once and then (at least in theory) never again, I will
-not be able to provide support or testing. Please check the forums as well as
-any forks of the repo for potential updates by the community.
+## Important
 
 Quality of the script is also disputable given that it is a one-off. Use of
 MySQL/MariaDB is hard-coded, but (untested) lines of code to work with the
@@ -30,6 +28,10 @@ This is an attempt to do exactly that. It is a one-off migration of data to
 InfluxDB. Afterwards you should setup the InfluxDB integration to directly store
 data to InfluxDB (and only keep a couple of days to few weeks at most in the
 traditional database for the logbook and history components).
+
+This version contains adaptations on the original.
+By setting the `table` argument to `both`, statistics will be used to build out historical data for entities.
+
 
 References:
 - https://www.home-assistant.io/integrations/recorder/

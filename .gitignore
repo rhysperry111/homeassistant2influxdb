@@ -2,3 +2,7 @@
 *.pyc
 home-assistant-core
 .venv
+.DS_Store
+.python-version
+.idea/
+venv/
