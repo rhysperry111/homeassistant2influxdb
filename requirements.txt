@@ -1,7 +1,10 @@
 influxdb
 influxdb_client
-mysqlclient
-pyyaml
+mysqlclient~=2.1.1
+pyyaml~=6.0
 setuptools
-tqdm
+tqdm~=4.64.0
 wheel
+
+voluptuous~=0.13.1
+homeassistant~=2022.6.7

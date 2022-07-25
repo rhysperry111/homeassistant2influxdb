@@ -1,0 +1,12 @@
+api_version: 2
+ssl: false
+host: 127.0.0.1
+port: 8086
+token: TOKEN_HERE
+organization: ORGANIZATION_ID
+bucket: BUCKET_NAME
+tags:
+  source: HA
+tags_attributes:
+  - friendly_name
+default_measurement: units
