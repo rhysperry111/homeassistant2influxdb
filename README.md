@@ -1,6 +1,8 @@
 # Home Assistant - History to InfluxDB
 
-Adapted from [dseifert](https://github.com/dseifert/homeassistant2influxdb) now archived version
+Adapted from [dseifert](https://github.com/dseifert/homeassistant2influxdb) now archived version.
+
+Working with home assistant core-2022.7.6 and influx v2.3.0.
 
 ## Important
 
