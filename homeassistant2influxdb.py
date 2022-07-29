@@ -15,7 +15,7 @@ sys.path.append("home-assistant-core")
 
 # MySQL / MariaDB
 try:
-    from MySQLdb import connect as mysql_connect, cursors
+    from MySQLdb import connect as mysql_connect, cursors, Error
 except:
     print("Warning: Could not load Mysql driver, might not be a problem if you intend to use sqlite")
 
@@ -153,7 +153,8 @@ def main():
 
     # select the values we are interested in
     for table in tables:
-        print(f"Now working on {table}")
+        print(f"Running SQL query on database table {table}." +
+              "This may take longer than a few minutes, depending on how many rows there are in the database.")
         if args.row_count == 0:
             # query number of rows in states table - this will be more than the number of rows we
             # are going to process, but at least it gives us some percentage and estimation
@@ -172,72 +173,78 @@ def main():
         cursor.execute(sql_query)
 
         # Loop over each data row
-        print(f"    Processing rows")
+        print(f"    Processing rows from table {table} and writing to InfluxDB.")
         with tqdm(total=total, mininterval=1, maxinterval=5, unit=" rows", unit_scale=True, leave=False) as progress_bar:
-            for row in cursor:
-                progress_bar.update(1)
-                try:
-                    if table == "states":
-                        _entity_id = rename_entity_id(row[0])
-                        _state = row[1]
-                        _attributes_raw = row[2]
-                        _attributes = rename_friendly_name(json.loads(_attributes_raw))
-                        _event_type = row[3]
-                        _time_fired = row[4]
-                    elif table == "statistics":
-                        _entity_id = rename_entity_id(row[0])
-                        _state = row[1]
-                        _mean = row[1]
-                        _min = row[2]
-                        _max = row[3]
-                        _attributes_raw = row[4]
-                        _attributes = create_statistics_attributes(_mean, _min, _max, json.loads(_attributes_raw))
-                        _event_type = row[5]
-                        _time_fired = row[6]
-                except Exception as e:
-                    print("Failed extracting data from %s: %s.\nAttributes: %s" % (row, e, _attributes_raw))
-                    continue
-
-                try:
-                    # recreate state and event
-                    state = State(
-                        entity_id=_entity_id,
-                        state=_state,
-                        attributes=_attributes)
-                    event = Event(
-                        _event_type,
-                        data={"new_state": state},
-                        time_fired=_time_fired
-                    )
-                except InvalidEntityFormatError:
-                    pass
-                else:
-                    data = converter(event)
-                    if not data:
+            try:
+                row_counter = 0
+                for row in cursor:
+                    progress_bar.update(1)
+                    row_counter += 1
+                    try:
+                        if table == "states":
+                            _entity_id = rename_entity_id(row[0])
+                            _state = row[1]
+                            _attributes_raw = row[2]
+                            _attributes = rename_friendly_name(json.loads(_attributes_raw))
+                            _event_type = row[3]
+                            _time_fired = row[4]
+                        elif table == "statistics":
+                            _entity_id = rename_entity_id(row[0])
+                            _state = row[1]
+                            _mean = row[1]
+                            _min = row[2]
+                            _max = row[3]
+                            _attributes_raw = row[4]
+                            _attributes = create_statistics_attributes(_mean, _min, _max, json.loads(_attributes_raw))
+                            _event_type = row[5]
+                            _time_fired = row[6]
+                    except Exception as e:
+                        print("Failed extracting data from %s: %s.\nAttributes: %s" % (row, e, _attributes_raw))
                         continue
 
-                    # collect statistics (remove this code block to speed up processing slightly)
-                    if "friendly_name" in _attributes:
-                        friendly_name = _attributes["friendly_name"]
+                    try:
+                        # recreate state and event
+                        state = State(
+                            entity_id=_entity_id,
+                            state=_state,
+                            attributes=_attributes)
+                        event = Event(
+                            _event_type,
+                            data={"new_state": state},
+                            time_fired=_time_fired
+                        )
+                    except InvalidEntityFormatError:
+                        pass
+                    else:
+                        data = converter(event)
+                        if not data:
+                            continue
 
-                        if _entity_id not in statistics:
-                            statistics[_entity_id] = {friendly_name: 1}
-                        elif friendly_name not in statistics[_entity_id]:
-                            statistics[_entity_id][friendly_name] = 1
-                            print("Found new name '%s' for entity '%s'. All names known so far: %s" % (
-                                    friendly_name, _entity_id, statistics[_entity_id].keys()))
-                            print(row)
-                        else:
-                            statistics[_entity_id][friendly_name] += 1
+                        # collect statistics (remove this code block to speed up processing slightly)
+                        if "friendly_name" in _attributes:
+                            friendly_name = _attributes["friendly_name"]
 
-                    influx_batch_json.append(data)
-                    influx_batch_size_cur += 1
+                            if _entity_id not in statistics:
+                                statistics[_entity_id] = {friendly_name: 1}
+                            elif friendly_name not in statistics[_entity_id]:
+                                statistics[_entity_id][friendly_name] = 1
+                                print("Found new name '%s' for entity '%s'. All names known so far: %s" % (
+                                        friendly_name, _entity_id, statistics[_entity_id].keys()))
+                                print(row)
+                            else:
+                                statistics[_entity_id][friendly_name] += 1
 
-                    if influx_batch_size_cur >= influx_batch_size_max:
-                        if not args.dry:
-                            influx.write(influx_batch_json)
-                        influx_batch_size_cur = 0
-                        influx_batch_json = []
+                        influx_batch_json.append(data)
+                        influx_batch_size_cur += 1
+
+                        if influx_batch_size_cur >= influx_batch_size_max:
+                            if not args.dry:
+                                influx.write(influx_batch_json)
+                            influx_batch_size_cur = 0
+                            influx_batch_json = []
+            except Error as mysql_error:
+                print(f"MySQL error on row {row_counter}: {mysql_error}")
+                continue
             progress_bar.close()
             cursor.close()
 
@@ -280,15 +287,25 @@ def formulate_sql_query(table: str, arg_tables: str):
     """
     sql_query = ""
     if table == "states":
-        sql_query = """
-        SELECT states.entity_id,
-               states.state,
-               states.attributes,
-               events.event_type,
-               events.time_fired
-        FROM states,
-             events
-        WHERE events.event_id = states.event_id"""
+        # Using two different SQL queries in a Union to support data made with older HA db schema:
+        # https://github.com/home-assistant/core/pull/71165
+        sql_query = """select SQL_NO_CACHE states.entity_id,
+                              states.state,
+                              states.attributes,
+                              events.event_type as event_type,
+                              events.time_fired as time_fired
+                       from states,
+                            events
+                       where events.event_id = states.event_id
+                       UNION
+                       select states.entity_id,
+                              states.state,
+                              state_attributes.shared_attrs as attributes,
+                              'state_changed',
+                              states.last_updated as time_fired
+                       from states, state_attributes
+                       where event_id is null
+                        and states.attributes_id = state_attributes.attributes_id;"""
     elif table == "statistics":
         if arg_tables == 'both':
             # If we're adding both, we should not add statistics for the same time period we're adding events
@@ -297,7 +314,7 @@ def formulate_sql_query(table: str, arg_tables: str):
         else:
             inset_query = ''
         sql_query = f"""
-        SELECT statistics_meta.statistic_id,
+        SELECT SQL_NO_CACHE statistics_meta.statistic_id,
                statistics.mean,
                statistics.min,
                statistics.max,
