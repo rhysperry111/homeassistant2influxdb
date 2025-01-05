@@ -191,6 +191,7 @@ def main():
                             _attributes = rename_friendly_name(json.loads(_attributes_raw))
                             _event_type = row[3]
                             _time_fired = datetime.fromtimestamp(row[4])
+                            _time_fired_ts = row[4]
                         elif table == "statistics":
                             _entity_id = rename_entity_id(row[0])
                             _state = row[1]
@@ -201,6 +202,7 @@ def main():
                             _attributes = create_statistics_attributes(_mean, _min, _max, json.loads(_attributes_raw))
                             _event_type = row[5]
                             _time_fired = datetime.fromtimestamp(row[6])
+                            _time_fired_ts = row[6]
                     except Exception as e:
                         print("Failed extracting data from %s: %s.\nAttributes: %s" % (row, e, _attributes_raw))
                         continue
@@ -214,7 +216,7 @@ def main():
                         event = Event(
                             _event_type,
                             data={"new_state": state},
-                            time_fired=_time_fired
+                            time_fired_timestamp=_time_fired_ts
                         )
                     except InvalidEntityFormatError:
                         pass
